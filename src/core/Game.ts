@@ -433,7 +433,7 @@ export class Game {
       this.updateFov();
     }
 
-    for (const b of this.bots.bots) if (b.alive) b.syncMesh();
+    for (const b of this.bots.bots) if (b.alive) { b.animate(dt, this.now); b.syncMesh(); }
     this.effects.update(dt);
     const run = MOVEMENT.runSpeed.value * def.moveSpeedMult.value;
     this.viewModel.update(dt, {

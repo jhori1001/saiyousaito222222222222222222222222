@@ -88,6 +88,7 @@ export class StrafeBehavior implements BotBehavior {
     const b = ctx.bounds;
     const outside = b && (nx < b.minX || nx > b.maxX || nz < b.minZ || nz > b.maxZ);
     if (outside || botBlocked(ctx.world, nx, bot.pos.y, nz)) {
+      bot.vel.set(0, 0, 0);
       this.dir = -this.dir;
       this.curSpeed = 0;
       return;

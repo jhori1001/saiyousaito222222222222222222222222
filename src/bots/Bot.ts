@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { type AABB, rayAABB, type Vec3 } from '../physics/aabb';
 import type { BotBehavior } from './BotBehaviors';
+import { animateRig, type BotRig, buildBotRig } from './BotModel';
 
 export type HitZone = 'head' | 'body' | 'leg';
 
@@ -29,39 +30,14 @@ export class Bot {
   respawnAt = -1;
   hitFlash = 0;
   readonly mesh: THREE.Group;
-  private mats: THREE.MeshStandardMaterial[] = [];
+  private rig: BotRig;
+  private animPhase = 0;
 
   constructor(public maxHp: number, public behavior: BotBehavior) {
     this.hp = maxHp;
-    this.mesh = Bot.buildMesh(this.mats);
+    this.rig = buildBotRig(this.id);
+    this.mesh = this.rig.root;
     this.mesh.visible = false;
-  }
-
-  private static buildMesh(mats: THREE.MeshStandardMaterial[]): THREE.Group {
-    const g = new THREE.Group();
-    const skin = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: 0.7 });
-    const suit = new THREE.MeshStandardMaterial({ color: 0xd2453a, roughness: 0.6 });
-    const pants = new THREE.MeshStandardMaterial({ color: 0x3b3f46, roughness: 0.8 });
-    const visor = new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.3, metalness: 0.4 });
-    mats.push(skin, suit, pants, visor);
-    const add = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-      mesh.position.set(x, y, z);
-      mesh.castShadow = true;
-      g.add(mesh);
-      return mesh;
-    };
-    // head (exactly the head hitbox)
-    add(0.26, 0.28, 0.26, 0, 1.62, 0, skin);
-    add(0.2, 0.06, 0.02, 0, 1.64, -0.135, visor);
-    // torso + arms (inside body hitbox)
-    add(0.42, 0.62, 0.3, 0, 1.17, 0, suit);
-    add(0.06, 0.56, 0.12, -0.24, 1.18, 0, suit);
-    add(0.06, 0.56, 0.12, 0.24, 1.18, 0, suit);
-    // legs (inside leg hitbox)
-    add(0.18, 0.86, 0.22, -0.11, 0.43, 0, pants);
-    add(0.18, 0.86, 0.22, 0.11, 0.43, 0, pants);
-    return g;
   }
 
   spawn(x: number, y: number, z: number, now: number, zoneId: string): void {
@@ -91,7 +67,16 @@ export class Bot {
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.y = this.yaw;
     const f = this.hitFlash;
-    for (const m of this.mats) m.emissive.setRGB(f, f * 0.9, f * 0.9);
+    for (const m of this.rig.materials) m.emissive.setRGB(f * 0.8, f * 0.25, f * 0.2);
+  }
+
+  /** Per-frame procedural animation driven by velocity. */
+  animate(dt: number, time: number): void {
+    // sideways component of velocity in the bot's local frame (+ = bot's right)
+    const lateral = this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw);
+    this.animPhase += Math.abs(lateral) * dt * 4.2;
+    if (Math.abs(lateral) < 0.05) this.animPhase += (Math.round(this.animPhase / Math.PI) * Math.PI - this.animPhase) * Math.min(1, dt * 10);
+    animateRig(this.rig, this.animPhase, lateral, time + this.id);
   }
 
   /** Ray (world space, d normalised) vs rotated hitboxes. */
@@ -117,8 +102,8 @@ export class Bot {
   }
 
   dispose(): void {
-    this.mesh.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
-    this.mats.forEach((m) => m.dispose());
+    // geometries are shared between bots; only materials are per bot
+    this.rig.materials.forEach((m) => m.dispose());
     this.mesh.removeFromParent();
   }
 }
